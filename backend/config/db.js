@@ -1,13 +1,14 @@
-// config/db.js
-
 const { Pool } = require('pg');
+const carregarVariaveisDeAmbiente = require('./env');
+
+carregarVariaveisDeAmbiente();
 
 const pool = new Pool({
-    user: 'postgres',
-    password: '123',
-    host: 'localhost',
-    database: 'frotagesta',
-    port: 5432
+    user: process.env.DB_USER || 'postgres',
+    host: process.env.DB_HOST || 'localhost',
+    database: process.env.DB_NAME || 'frotagesta',
+    password: process.env.DB_PASSWORD,
+    port: Number(process.env.DB_PORT) || 5432
 });
 
 module.exports = pool;
