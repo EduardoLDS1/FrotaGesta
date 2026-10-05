@@ -1,10 +1,14 @@
+-- Execute conectado ao banco frotagesta. Não apaga registros existentes.
 CREATE TABLE IF NOT EXISTS veiculos (
     id SERIAL PRIMARY KEY,
-    placa VARCHAR(7) UNIQUE NOT NULL,
+    placa VARCHAR(7) NOT NULL UNIQUE,
     marca VARCHAR(100) NOT NULL,
     modelo VARCHAR(100) NOT NULL,
-    ano INTEGER CHECK (ano IS NULL OR (ano >= 1900 AND ano <= 2100)),
-    quilometragem NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (quilometragem >= 0),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ano INTEGER CHECK (ano BETWEEN 1900 AND 2100),
+    quilometragem NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (quilometragem >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Compatibilidade com a tabela do Módulo 2, caso ainda faltem os timestamps.
+ALTER TABLE veiculos ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE veiculos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();

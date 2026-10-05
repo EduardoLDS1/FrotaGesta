@@ -1,157 +1,64 @@
 const request = require('supertest');
-
-jest.mock('./config/db', () => ({
-    query: jest.fn()
-}));
-
-process.env.NODE_ENV = 'test';
-
+jest.mock('./config/db', () => ({ query: jest.fn() }));
 const pool = require('./config/db');
 const app = require('./server');
-
-describe('API FrotaGesta - Veiculos', () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
-    });
-
-    test('GET / retorna status da API', async () => {
-        const response = await request(app).get('/');
-
-        expect(response.statusCode).toBe(200);
-        expect(response.body.mensagem).toBe('API FrotaGesta funcionando');
-    });
-
-    test('GET /veiculos lista veiculos', async () => {
-        pool.query.mockResolvedValueOnce({
-            rows: [
-                {
-                    id: 1,
-                    placa: 'ABC1D23',
-                    marca: 'Toyota',
-                    modelo: 'Hilux'
-                }
-            ]
-        });
-
-        const response = await request(app).get('/veiculos');
-
-        expect(response.statusCode).toBe(200);
-        expect(response.body).toHaveLength(1);
-        expect(pool.query).toHaveBeenCalledWith(
-            'SELECT * FROM veiculos ORDER BY id ASC'
-        );
-    });
-
-    test('GET /veiculos/:id busca um veiculo', async () => {
-        pool.query.mockResolvedValueOnce({
-            rows: [
-                {
-                    id: 1,
-                    placa: 'ABC1D23',
-                    marca: 'Toyota',
-                    modelo: 'Hilux'
-                }
-            ]
-        });
-
-        const response = await request(app).get('/veiculos/1');
-
-        expect(response.statusCode).toBe(200);
-        expect(response.body.id).toBe(1);
-    });
-
-    test('POST /veiculos cadastra um veiculo', async () => {
-        pool.query.mockResolvedValueOnce({
-            rows: [
-                {
-                    id: 1,
-                    placa: 'ABC1D23',
-                    marca: 'Toyota',
-                    modelo: 'Hilux',
-                    ano: 2024,
-                    quilometragem: 1000,
-                    status: 'Ativo'
-                }
-            ]
-        });
-
-        const response = await request(app)
-            .post('/veiculos')
-            .send({
-                placa: 'ABC1D23',
-                marca: 'Toyota',
-                modelo: 'Hilux',
-                ano: 2024,
-                quilometragem: 1000,
-                status: 'Ativo'
-            });
-
-        expect(response.statusCode).toBe(201);
-        expect(response.body.mensagem).toBe('Veiculo cadastrado com sucesso');
-        expect(response.body.veiculo.placa).toBe('ABC1D23');
-    });
-
-    test('POST /veiculos rejeita placa invalida', async () => {
-        const response = await request(app)
-            .post('/veiculos')
-            .send({
-                placa: '123',
-                marca: 'Toyota',
-                modelo: 'Hilux'
-            });
-
-        expect(response.statusCode).toBe(400);
-        expect(response.body.mensagem).toBe('Placa invalida');
-        expect(pool.query).not.toHaveBeenCalled();
-    });
-
-    test('PUT /veiculos/:id atualiza um veiculo', async () => {
-        pool.query.mockResolvedValueOnce({
-            rows: [
-                {
-                    id: 1,
-                    placa: 'ABC1D23',
-                    marca: 'Toyota',
-                    modelo: 'Hilux SRX',
-                    ano: 2024,
-                    quilometragem: 2000,
-                    status: 'Manutencao'
-                }
-            ]
-        });
-
-        const response = await request(app)
-            .put('/veiculos/1')
-            .send({
-                placa: 'ABC1D23',
-                marca: 'Toyota',
-                modelo: 'Hilux SRX',
-                ano: 2024,
-                quilometragem: 2000,
-                status: 'Manutencao'
-            });
-
-        expect(response.statusCode).toBe(200);
-        expect(response.body.mensagem).toBe('Veiculo atualizado com sucesso');
-    });
-
-    test('DELETE /veiculos/:id exclui um veiculo', async () => {
-        pool.query.mockResolvedValueOnce({
-            rows: [{ id: 1 }]
-        });
-
-        const response = await request(app).delete('/veiculos/1');
-
-        expect(response.statusCode).toBe(200);
-        expect(response.body.mensagem).toBe('Veiculo excluido com sucesso');
-    });
-
-    test('GET /veiculos/:id retorna 404 quando nao encontra', async () => {
-        pool.query.mockResolvedValueOnce({ rows: [] });
-
-        const response = await request(app).get('/veiculos/999');
-
-        expect(response.statusCode).toBe(404);
-        expect(response.body.mensagem).toBe('Veiculo nao encontrado');
-    });
+const veiculo = { placa: 'ABC1D23', marca: 'Chevrolet', modelo: 'Onix', ano: 2022, quilometragem: 30000 };
+beforeEach(() => jest.resetAllMocks());
+test('lista veículos retornados pelo banco', async () => {
+  pool.query.mockResolvedValue({ rows: [{ id: 1, ...veiculo }] });
+  const res = await request(app).get('/veiculos');
+  expect(res.status).toBe(200); expect(res.body[0].placa).toBe(veiculo.placa);
+});
+test('consulta veículo por ID', async () => {
+  pool.query.mockResolvedValue({ rows: [{ id: 1, ...veiculo }] });
+  expect((await request(app).get('/veiculos/1')).body.id).toBe(1);
+});
+test('cadastro normaliza a placa e retorna 201', async () => {
+  pool.query.mockResolvedValue({ rows: [{ id: 2, ...veiculo }] });
+  const res = await request(app).post('/veiculos').send({ ...veiculo, placa: 'abc1d23' });
+  expect(res.status).toBe(201); expect(pool.query.mock.calls[0][1][0]).toBe('ABC1D23');
+});
+test.each([
+  { placa: 'errada' }, { marca: '' }, { modelo: '   ' }, { ano: 1800 },
+  { ano: 2022.5 }, { quilometragem: -1 }, { quilometragem: '12' },
+  { quilometragem: 1.234 }, { marca: { trim: 'inválido' } },
+])('rejeita dados inválidos: %j', async (invalido) => {
+  expect((await request(app).post('/veiculos').send({ ...veiculo, ...invalido })).status).toBe(400);
+  expect(pool.query).not.toHaveBeenCalled();
+});
+test('permite ano vazio representado por null', async () => {
+  pool.query.mockResolvedValue({ rows: [{ id: 2, ...veiculo, ano: null }] });
+  expect((await request(app).post('/veiculos').send({ ...veiculo, ano: null })).status).toBe(201);
+});
+test('placa duplicada retorna conflito e erro de campo', async () => {
+  pool.query.mockRejectedValue({ code: '23505' });
+  const res = await request(app).post('/veiculos').send(veiculo);
+  expect(res.status).toBe(409); expect(res.body.campos.placa).toBeTruthy();
+});
+test('edita com parâmetros SQL', async () => {
+  pool.query.mockResolvedValue({ rows: [{ id: 1, ...veiculo }] });
+  expect((await request(app).put('/veiculos/1').send(veiculo)).status).toBe(200);
+  expect(pool.query.mock.calls[0][1]).toEqual([...Object.values(veiculo), '1']);
+});
+test.each(['get', 'put', 'delete'])('%s em veículo inexistente retorna 404', async metodo => {
+  pool.query.mockResolvedValue({ rows: [], rowCount: 0 });
+  expect((await request(app)[metodo]('/veiculos/999').send(veiculo)).status).toBe(404);
+});
+test('exclui veículo', async () => {
+  pool.query.mockResolvedValue({ rowCount: 1 });
+  expect((await request(app).delete('/veiculos/1')).status).toBe(204);
+});
+test('impede exclusão com vínculos', async () => {
+  pool.query.mockRejectedValue({ code: '23503' });
+  expect((await request(app).delete('/veiculos/1')).status).toBe(409);
+});
+test('rejeita ID inválido', async () => {
+  expect((await request(app).get('/veiculos/abc')).status).toBe(400);
+  expect(pool.query).not.toHaveBeenCalled();
+});
+test('falha de conexão retorna erro legível sem expor detalhes', async () => {
+  const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+  pool.query.mockRejectedValue(new Error('detalhe interno'));
+  const res = await request(app).get('/veiculos');
+  expect(res.status).toBe(500); expect(res.body.erro).not.toContain('detalhe interno'); log.mockRestore();
 });

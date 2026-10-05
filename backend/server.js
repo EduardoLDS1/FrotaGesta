@@ -1,35 +1,16 @@
 const express = require('express');
 const cors = require('cors');
-const carregarVariaveisDeAmbiente = require('./config/env');
-
-carregarVariaveisDeAmbiente();
-
-const pool = require('./config/db');
-const veiculosRoutes = require('./routes/veiculos');
-
 const app = express();
 
-app.use(cors());
+app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000' }));
 app.use(express.json());
-
-app.get('/', (req, res) => {
-    res.status(200).json({
-        mensagem: 'API FrotaGesta funcionando'
-    });
+app.use('/veiculos', require('./routes/veiculos'));
+app.use((err, req, res, next) => {
+    if (err.type === 'entity.parse.failed') return res.status(400).json({ erro: 'JSON inválido.' });
+    console.error(err.message);
+    res.status(500).json({ erro: 'Não foi possível concluir a operação.' });
 });
-
-app.use('/veiculos', veiculosRoutes);
-
-if (process.env.NODE_ENV !== 'test') {
-    const PORT = Number(process.env.PORT) || 5000;
-
-    app.listen(PORT, () => {
-        console.log(`Servidor FrotaGesta rodando na porta ${PORT}`);
-    });
-
-    pool.query('SELECT NOW() AS agora')
-        .then(() => console.log('Conexao com PostgreSQL realizada com sucesso'))
-        .catch((erro) => console.error('Erro ao conectar ao PostgreSQL:', erro.message));
+if (require.main === module) {
+    app.listen(process.env.PORT || 5000, () => console.log('API FrotaGesta iniciada.'));
 }
-
 module.exports = app;

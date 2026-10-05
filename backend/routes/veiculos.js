@@ -1,300 +1,62 @@
-const express = require('express');
+const router = require('express').Router();
 const pool = require('../config/db');
 const validarPlaca = require('../validarPlaca');
 
-const router = express.Router();
-
-function normalizarPlaca(placa) {
-    return String(placa)
-        .replace(/[^a-zA-Z0-9]/g, '')
-        .toUpperCase();
+function validar(body) {
+    const { placa, marca, modelo, ano, quilometragem } = body || {};
+    const erros = {};
+    const normalizada = typeof placa === 'string' ? placa.trim().toUpperCase() : '';
+    if (!validarPlaca(normalizada)) erros.placa = 'Use uma placa como ABC1234 ou ABC1D23.';
+    for (const [campo, valor] of Object.entries({ marca, modelo })) {
+        if (typeof valor !== 'string' || !valor.trim() || valor.trim().length > 100)
+            erros[campo] = 'Informe de 1 a 100 caracteres.';
+    }
+    if (ano !== null && ano !== undefined && (!Number.isInteger(ano) || ano < 1900 || ano > 2100))
+        erros.ano = 'Informe um ano inteiro entre 1900 e 2100.';
+    if (typeof quilometragem !== 'number' || !Number.isFinite(quilometragem) || quilometragem < 0 || quilometragem > 9999999999.99 || Math.abs(quilometragem * 100 - Math.round(quilometragem * 100)) > 0.001)
+        erros.quilometragem = 'Informe uma quilometragem válida, positiva ou zero, com até duas casas decimais.';
+    return { erros, dados: [normalizada, typeof marca === 'string' ? marca.trim() : '', typeof modelo === 'string' ? modelo.trim() : '', ano ?? null, quilometragem] };
 }
-
-function validarId(id) {
-    return /^\d+$/.test(String(id)) && Number(id) > 0;
+function falha(err, res) {
+    if (err.code === '23505') return res.status(409).json({ erro: 'Já existe um veículo com essa placa.', campos: { placa: 'Essa placa já está cadastrada.' } });
+    if (err.code === '23503') return res.status(409).json({ erro: 'Este veículo possui registros vinculados e não pode ser excluído.' });
+    console.error('Falha na operação de veículos:', err.code || err.message);
+    return res.status(500).json({ erro: 'Não foi possível acessar os veículos. Verifique a conexão e a configuração do banco.' });
 }
-
-// GET /veiculos
+router.param('id', (req, res, next, id) => {
+    if (!/^[1-9][0-9]*$/.test(id) || Number(id) > 2147483647) return res.status(400).json({ erro: 'ID inválido.' });
+    next();
+});
 router.get('/', async (req, res) => {
-    try {
-        const resultado = await pool.query(
-            'SELECT * FROM veiculos ORDER BY id ASC'
-        );
-
-        return res.status(200).json(resultado.rows);
-    } catch (erro) {
-        console.error('Erro ao listar veiculos:', erro.message);
-
-        return res.status(500).json({
-            mensagem: 'Erro ao listar veiculos'
-        });
-    }
+    try { res.json((await pool.query('SELECT * FROM veiculos ORDER BY id DESC')).rows); }
+    catch (err) { falha(err, res); }
 });
-
-// GET /veiculos/:id
 router.get('/:id', async (req, res) => {
-    const { id } = req.params;
-
-    if (!validarId(id)) {
-        return res.status(400).json({
-            mensagem: 'ID de veiculo invalido'
-        });
-    }
-
     try {
-        const resultado = await pool.query(
-            'SELECT * FROM veiculos WHERE id = $1',
-            [id]
-        );
-
-        if (resultado.rows.length === 0) {
-            return res.status(404).json({
-                mensagem: 'Veiculo nao encontrado'
-            });
-        }
-
-        return res.status(200).json(resultado.rows[0]);
-    } catch (erro) {
-        console.error('Erro ao buscar veiculo:', erro.message);
-
-        return res.status(500).json({
-            mensagem: 'Erro ao buscar veiculo'
-        });
-    }
+        const { rows } = await pool.query('SELECT * FROM veiculos WHERE id = $1', [req.params.id]);
+        return rows[0] ? res.json(rows[0]) : res.status(404).json({ erro: 'Veículo não encontrado.' });
+    } catch (err) { falha(err, res); }
 });
-
-// POST /veiculos
 router.post('/', async (req, res) => {
-    let {
-        placa,
-        marca,
-        modelo,
-        ano,
-        quilometragem
-    } = req.body;
-
-    if (!placa || !marca || !modelo) {
-        return res.status(400).json({
-            mensagem: 'Placa, marca e modelo sao obrigatorios'
-        });
-    }
-
-    placa = normalizarPlaca(placa);
-
-    if (!validarPlaca(placa)) {
-        return res.status(400).json({
-            mensagem: 'Placa invalida'
-        });
-    }
-
-    const anoNumero =
-        ano === undefined || ano === null || ano === ''
-            ? null
-            : Number(ano);
-
-    const quilometragemNumero =
-        quilometragem === undefined ||
-        quilometragem === null ||
-        quilometragem === ''
-            ? 0
-            : Number(quilometragem);
-
-    if (
-        anoNumero !== null &&
-        (!Number.isInteger(anoNumero) ||
-            anoNumero < 1900 ||
-            anoNumero > 2100)
-    ) {
-        return res.status(400).json({
-            mensagem: 'Ano invalido'
-        });
-    }
-
-    if (
-        !Number.isFinite(quilometragemNumero) ||
-        quilometragemNumero < 0
-    ) {
-        return res.status(400).json({
-            mensagem: 'Quilometragem invalida'
-        });
-    }
-
+    const { erros, dados } = validar(req.body);
+    if (Object.keys(erros).length) return res.status(400).json({ erro: 'Revise os campos informados.', campos: erros });
     try {
-        const resultado = await pool.query(
-            `INSERT INTO veiculos
-            (placa, marca, modelo, ano, quilometragem)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING *`,
-            [
-                placa,
-                String(marca).trim(),
-                String(modelo).trim(),
-                anoNumero,
-                quilometragemNumero
-            ]
-        );
-
-        return res.status(201).json({
-            mensagem: 'Veiculo cadastrado com sucesso',
-            veiculo: resultado.rows[0]
-        });
-    } catch (erro) {
-        if (erro.code === '23505') {
-            return res.status(409).json({
-                mensagem: 'Ja existe um veiculo com essa placa'
-            });
-        }
-
-        console.error('Erro ao cadastrar veiculo:', erro.message);
-
-        return res.status(500).json({
-            mensagem: 'Erro ao cadastrar veiculo'
-        });
-    }
+        const { rows } = await pool.query('INSERT INTO veiculos (placa, marca, modelo, ano, quilometragem) VALUES ($1,$2,$3,$4,$5) RETURNING *', dados);
+        res.status(201).json(rows[0]);
+    } catch (err) { falha(err, res); }
 });
-
-// PUT /veiculos/:id
 router.put('/:id', async (req, res) => {
-    const { id } = req.params;
-
-    let {
-        placa,
-        marca,
-        modelo,
-        ano,
-        quilometragem
-    } = req.body;
-
-    if (!validarId(id)) {
-        return res.status(400).json({
-            mensagem: 'ID de veiculo invalido'
-        });
-    }
-
-    if (!placa || !marca || !modelo) {
-        return res.status(400).json({
-            mensagem: 'Placa, marca e modelo sao obrigatorios'
-        });
-    }
-
-    placa = normalizarPlaca(placa);
-
-    if (!validarPlaca(placa)) {
-        return res.status(400).json({
-            mensagem: 'Placa invalida'
-        });
-    }
-
-    const anoNumero =
-        ano === undefined || ano === null || ano === ''
-            ? null
-            : Number(ano);
-
-    const quilometragemNumero =
-        quilometragem === undefined ||
-        quilometragem === null ||
-        quilometragem === ''
-            ? 0
-            : Number(quilometragem);
-
-    if (
-        anoNumero !== null &&
-        (!Number.isInteger(anoNumero) ||
-            anoNumero < 1900 ||
-            anoNumero > 2100)
-    ) {
-        return res.status(400).json({
-            mensagem: 'Ano invalido'
-        });
-    }
-
-    if (
-        !Number.isFinite(quilometragemNumero) ||
-        quilometragemNumero < 0
-    ) {
-        return res.status(400).json({
-            mensagem: 'Quilometragem invalida'
-        });
-    }
-
+    const { erros, dados } = validar(req.body);
+    if (Object.keys(erros).length) return res.status(400).json({ erro: 'Revise os campos informados.', campos: erros });
     try {
-        const resultado = await pool.query(
-            `UPDATE veiculos
-             SET placa = $1,
-                 marca = $2,
-                 modelo = $3,
-                 ano = $4,
-                 quilometragem = $5
-             WHERE id = $6
-             RETURNING *`,
-            [
-                placa,
-                String(marca).trim(),
-                String(modelo).trim(),
-                anoNumero,
-                quilometragemNumero,
-                id
-            ]
-        );
-
-        if (resultado.rows.length === 0) {
-            return res.status(404).json({
-                mensagem: 'Veiculo nao encontrado'
-            });
-        }
-
-        return res.status(200).json({
-            mensagem: 'Veiculo atualizado com sucesso',
-            veiculo: resultado.rows[0]
-        });
-    } catch (erro) {
-        if (erro.code === '23505') {
-            return res.status(409).json({
-                mensagem: 'Ja existe um veiculo com essa placa'
-            });
-        }
-
-        console.error('Erro ao atualizar veiculo:', erro.message);
-
-        return res.status(500).json({
-            mensagem: 'Erro ao atualizar veiculo'
-        });
-    }
+        const { rows } = await pool.query('UPDATE veiculos SET placa=$1, marca=$2, modelo=$3, ano=$4, quilometragem=$5, updated_at=NOW() WHERE id=$6 RETURNING *', [...dados, req.params.id]);
+        return rows[0] ? res.json(rows[0]) : res.status(404).json({ erro: 'Veículo não encontrado.' });
+    } catch (err) { falha(err, res); }
 });
-
-// DELETE /veiculos/:id
 router.delete('/:id', async (req, res) => {
-    const { id } = req.params;
-
-    if (!validarId(id)) {
-        return res.status(400).json({
-            mensagem: 'ID de veiculo invalido'
-        });
-    }
-
     try {
-        const resultado = await pool.query(
-            'DELETE FROM veiculos WHERE id = $1 RETURNING *',
-            [id]
-        );
-
-        if (resultado.rows.length === 0) {
-            return res.status(404).json({
-                mensagem: 'Veiculo nao encontrado'
-            });
-        }
-
-        return res.status(200).json({
-            mensagem: 'Veiculo excluido com sucesso',
-            veiculo: resultado.rows[0]
-        });
-    } catch (erro) {
-        console.error('Erro ao excluir veiculo:', erro.message);
-
-        return res.status(500).json({
-            mensagem: 'Erro ao excluir veiculo'
-        });
-    }
+        const { rowCount } = await pool.query('DELETE FROM veiculos WHERE id=$1', [req.params.id]);
+        return rowCount ? res.status(204).end() : res.status(404).json({ erro: 'Veículo não encontrado.' });
+    } catch (err) { falha(err, res); }
 });
-
 module.exports = router;
