@@ -1,8 +1,49 @@
-* { box-sizing: border-box; }
-body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; color: #172b40; background: #f4f7fa; -webkit-font-smoothing: antialiased; }
-button, input, select { font: inherit; }
-button, a, input, select { -webkit-tap-highlight-color: transparent; }
-button { cursor: pointer; }
-button:disabled { cursor: wait; opacity: .6; }
-button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #24aa89; outline-offset: 3px; }
-h1, h2, h3, p { margin: 0; }
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #172337;
+  background: #f7f8fb;
+  -webkit-font-smoothing: antialiased;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #38a887;
+  outline-offset: 3px;
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+svg {
+  flex-shrink: 0;
+}
+button {
+  line-height: 1.3;
+}

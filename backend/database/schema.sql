@@ -1,4 +1,3 @@
--- Execute conectado ao banco frotagesta. Não apaga registros existentes.
 CREATE TABLE IF NOT EXISTS veiculos (
     id SERIAL PRIMARY KEY,
     placa VARCHAR(7) NOT NULL UNIQUE,
@@ -9,6 +8,5 @@ CREATE TABLE IF NOT EXISTS veiculos (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
--- Compatibilidade com a tabela do Módulo 2, caso ainda faltem os timestamps.
 ALTER TABLE veiculos ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE veiculos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();

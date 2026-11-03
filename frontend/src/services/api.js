@@ -1,36 +1,67 @@
-const baseURL = (process.env.REACT_APP_API_URL || '').replace(/\/$/, '');
-
-async function requisitar(caminho, opcoes = {}) {
+const baseURL = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
+export async function api(caminho, { method = "GET", body } = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const limite = setTimeout(() => controller.abort(), 15000);
   try {
-    const resposta = await fetch(`${baseURL}${caminho}`, {
-      ...opcoes,
+    const r = await fetch(baseURL + caminho, {
+      method,
+      credentials: "include",
       signal: controller.signal,
-      headers: { ...(opcoes.body ? { 'Content-Type': 'application/json' } : {}), ...opcoes.headers },
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
     });
-    if (resposta.status === 204) return null;
-    const tipo = resposta.headers.get('content-type') || '';
-    if (!tipo.includes('application/json')) throw new Error('A API não respondeu corretamente. Verifique se o backend está iniciado.');
-    const dados = await resposta.json();
-    if (!resposta.ok) {
-      const erro = new Error(dados.erro || 'Não foi possível concluir a operação.');
-      erro.campos = dados.campos;
-      throw erro;
+    if (r.status === 204) return null;
+    if (!(r.headers.get("content-type") || "").includes("application/json"))
+      throw new Error(
+        "A API não respondeu corretamente. Verifique se o backend está iniciado.",
+      );
+    const dados = await r.json();
+    if (!r.ok) {
+      const e = new Error(
+        dados.erro || "Não foi possível concluir a operação.",
+      );
+      e.status = r.status;
+      if (r.status === 401 && !caminho.startsWith("/auth"))
+        window.dispatchEvent(new Event("sessao-expirada"));
+      throw e;
     }
     return dados;
-  } catch (erro) {
-    if (erro.name === 'AbortError') throw new Error('A API demorou para responder. Tente novamente.');
-    if (erro instanceof TypeError) throw new Error('Não foi possível conectar à API. Verifique se o backend está iniciado.');
-    throw erro;
-  } finally { clearTimeout(timeout); }
+  } catch (e) {
+    if (e.name === "AbortError")
+      throw new Error(
+        "A requisição demorou para responder. Consulte a lista antes de tentar novamente.",
+      );
+    if (e instanceof TypeError)
+      throw new Error("Não foi possível conectar à API. Confira o backend.");
+    throw e;
+  } finally {
+    clearTimeout(limite);
+  }
 }
-export const api = {
-  listar: async () => {
-    const dados = await requisitar('/veiculos');
-    if (!Array.isArray(dados)) throw new Error('A API retornou um formato de lista inválido. Confira a versão do backend.');
-    return dados;
-  },
-  salvar: (dados, id) => requisitar(id ? `/veiculos/${id}` : '/veiculos', { method: id ? 'PUT' : 'POST', body: JSON.stringify(dados) }),
-  excluir: id => requisitar(`/veiculos/${id}`, { method: 'DELETE' }),
-};
+
+export async function anexarComprovante(id, arquivo) {
+  if (!arquivo || arquivo.size > 5*1024*1024) throw new Error('O comprovante deve ter até 5 MB.');
+  const aceitos=['application/pdf','image/jpeg','image/png','image/webp'];
+  if(!aceitos.includes(arquivo.type)) throw new Error('Envie PDF, JPG, PNG ou WEBP.');
+  const resposta=await fetch(baseURL+`/despesas/${id}/comprovante`,{
+    method:'POST',credentials:'include',headers:{'Content-Type':arquivo.type,
+      'X-Nome-Arquivo':encodeURIComponent(arquivo.name.slice(0,180))},body:arquivo
+  });
+  const dados=await resposta.json();
+  if(!resposta.ok) throw new Error(dados.erro||'Não foi possível salvar o comprovante.');
+  return dados;
+}
+export async function abrirComprovante(id) {
+  const resposta=await fetch(baseURL+`/despesas/${id}/comprovante`,{credentials:'include'});
+  if(!resposta.ok) {
+    const dados=await resposta.json().catch(()=>({}));
+    throw new Error(dados.erro||'Não foi possível abrir o comprovante.');
+  }
+  const blob=await resposta.blob();
+  const url=URL.createObjectURL(blob);
+  const janela=window.open(url,'_blank','noopener,noreferrer');
+  if(!janela) {
+    const a=document.createElement('a');a.href=url;a.download=`comprovante-${id}`;a.click();
+  }
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}

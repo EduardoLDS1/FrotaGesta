@@ -1,75 +1,141 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import App from './App';
-import { api } from './services/api';
-jest.mock('./services/api', () => ({ api: { listar: jest.fn(), salvar: jest.fn(), excluir: jest.fn() } }));
-beforeEach(() => { jest.resetAllMocks(); api.listar.mockResolvedValue([]); });
-test('mostra estado vazio com dados reais da API', async () => {
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import App from "./App";
+import Estoque from "./pages/Estoque";
+import { api } from "./services/api";
+jest.mock("./services/api", () => ({ api: jest.fn() }));
+beforeEach(() => {
+  jest.resetAllMocks();
+  window.scrollTo = jest.fn();
+  Element.prototype.scrollIntoView = jest.fn();
+});
+test("tela de login segue fluxo autenticado", async () => {
+  api.mockImplementation(async (path) => {
+    if (path === "/auth/me")
+      throw Object.assign(new Error("Sessão ausente"), { status: 401 });
+    if (path === "/auth/login")
+      return { id: 1, nome: "Eduardo", perfil: "Administrador" };
+    if (path === "/dashboard")
+      return {
+        veiculos: 0,
+        em_manutencao: 0,
+        alertas: 0,
+        atividades: [],
+        produtos_baixos: [],
+      };
+  });
   render(<App />);
-  expect(await screen.findByText('Sua frota começa aqui')).toBeInTheDocument();
-  expect(screen.getByText('Veículos cadastrados')).toBeInTheDocument();
+  await screen.findByRole("heading", { name: "Acesse o Sistema" });
+  fireEvent.change(screen.getByLabelText(/Usuário ou E-mail/), {
+    target: { value: "admin" },
+  });
+  fireEvent.change(screen.getByLabelText(/^Senha/), {
+    target: { value: "Senha1234" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+  expect(await screen.findByText("Bem-vindo, Eduardo")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Usuários" })).toBeInTheDocument();
 });
-test('formulário impede cadastro incompleto', async () => {
+test("operador não vê o menu de usuários", async () => {
+  api.mockImplementation(async (p) =>
+    p === "/auth/me"
+      ? { id: 2, nome: "Operador", perfil: "Operador" }
+      : {
+          veiculos: 1,
+          em_manutencao: 0,
+          alertas: 0,
+          atividades: [],
+          produtos_baixos: [],
+        },
+  );
   render(<App />);
-  await screen.findByText('Sua frota começa aqui');
-  fireEvent.click(screen.getByRole('button', { name: 'Novo veículo' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Cadastrar veículo' }));
-  expect(screen.getByText('Use uma placa como ABC1234 ou ABC1D23.')).toBeInTheDocument();
-  expect(api.salvar).not.toHaveBeenCalled();
+  await screen.findByText("Bem-vindo, Operador");
+  expect(
+    screen.queryByRole("button", { name: "Usuários" }),
+  ).not.toBeInTheDocument();
 });
-test('envia dados normalizados e confirma o cadastro', async () => {
-  api.salvar.mockResolvedValue({ id: 1 });
-  render(<App />); await screen.findByText('Sua frota começa aqui');
-  fireEvent.click(screen.getByRole('button', { name: 'Novo veículo' }));
-  for (const [id, value] of Object.entries({ placa: 'abc1d23', marca: ' Chevrolet ', modelo: 'Onix', ano: '2022', quilometragem: '30000' })) {
-    fireEvent.change(document.getElementById(id), { target: { value } });
-  }
-  fireEvent.click(screen.getByRole('button', { name: 'Cadastrar veículo' }));
-  await waitFor(() => expect(api.salvar).toHaveBeenCalledWith({ placa: 'ABC1D23', marca: 'Chevrolet', modelo: 'Onix', ano: 2022, quilometragem: 30000 }, undefined));
-  expect(await screen.findByText('Veículo cadastrado com sucesso.')).toBeInTheDocument();
+const produto = {
+  id: 1,
+  nome: "Filtro de Óleo",
+  modelo: "Tecfil",
+  quantidade: 5,
+  estoque_minimo: 5,
+  valor_unitario: "25.00",
+};
+test("estoque exibe valor total e alerta com dados da API", async () => {
+  api.mockImplementation(async (p) => (p === "/produtos" ? [produto] : []));
+  render(<Estoque />);
+  expect(await screen.findByText("Filtro de Óleo")).toBeInTheDocument();
+  expect(screen.getByText("Estoque Baixo")).toBeInTheDocument();
+  expect(screen.getByText(/125,00/)).toBeInTheDocument();
 });
-test('mostra erro quando API está indisponível', async () => {
-  api.listar.mockRejectedValue(new Error('API indisponível'));
-  render(<App />);
-  expect(await screen.findByRole('alert')).toHaveTextContent('API indisponível');
-  expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument();
+test("entrada enviada atualiza saldo na lista", async () => {
+  let saldo = 5;
+  api.mockImplementation(async (p, o) => {
+    if (p === "/produtos/1/movimentacoes") {
+      saldo += o.body.quantidade;
+      return { ...produto, quantidade: saldo };
+    }
+    if (p === "/produtos") return [{ ...produto, quantidade: saldo }];
+    return [];
+  });
+  render(<Estoque />);
+  await screen.findByText("Filtro de Óleo");
+  fireEvent.change(screen.getByLabelText(/^Produto \*/), {
+    target: { value: "1" },
+  });
+  fireEvent.change(screen.getByLabelText(/^Quantidade \*/), {
+    target: { value: "3" },
+  });
+  fireEvent.change(screen.getByLabelText(/^Motivo/), {
+    target: { value: "Compra" },
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Registrar movimentação" }),
+  );
+  await screen.findByText("Movimentação registrada e estoque atualizado.");
+  await waitFor(() =>
+    expect(screen.getByText("8 unidades")).toBeInTheDocument(),
+  );
+  expect(api).toHaveBeenCalledWith("/produtos/1/movimentacoes", {
+    method: "POST",
+    body: { tipo: "Entrada", quantidade: 3, motivo: "Compra" },
+  });
 });
-const registro = { id: 1, placa: 'ABC1D23', marca: 'Chevrolet', modelo: 'Onix', ano: 2022, quilometragem: '30000.00' };
-test('edita quilometragem de veículo existente', async () => {
-  api.listar.mockResolvedValue([registro]); api.salvar.mockResolvedValue({ ...registro, quilometragem: 32000 });
-  render(<App />); await screen.findByText('Onix');
-  fireEvent.click(screen.getByRole('button', { name: 'Editar ABC1D23' }));
-  fireEvent.change(document.getElementById('quilometragem'), { target: { value: '32000' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
-  await waitFor(() => expect(api.salvar).toHaveBeenCalledWith({ placa: 'ABC1D23', marca: 'Chevrolet', modelo: 'Onix', ano: 2022, quilometragem: 32000 }, 1));
-  expect(await screen.findByText('Veículo atualizado com sucesso.')).toBeInTheDocument();
+test("saída recusada mantém os valores para correção", async () => {
+  api.mockImplementation(async (p) => {
+    if (p === "/produtos") return [produto];
+    if (p.endsWith("/1/movimentacoes"))
+      throw new Error("Estoque insuficiente.");
+    return [];
+  });
+  render(<Estoque />);
+  await screen.findByText("Filtro de Óleo");
+  fireEvent.change(screen.getByLabelText(/^Produto \*/), {
+    target: { value: "1" },
+  });
+  fireEvent.change(screen.getByLabelText("Tipo"), {
+    target: { value: "Saída" },
+  });
+  fireEvent.change(screen.getByLabelText(/^Quantidade \*/), {
+    target: { value: "2" },
+  });
+  fireEvent.change(screen.getByLabelText(/^Motivo/), {
+    target: { value: "Revisão" },
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Registrar movimentação" }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Estoque insuficiente.",
+  );
+  expect(screen.getByLabelText(/^Motivo/)).toHaveValue("Revisão");
 });
-test('erro de placa duplicada mantém os dados no formulário', async () => {
-  api.listar.mockResolvedValue([registro]);
-  api.salvar.mockRejectedValue(Object.assign(new Error('Placa duplicada.'), { campos: { placa: 'Essa placa já está cadastrada.' } }));
-  render(<App />); await screen.findByText('Onix');
-  fireEvent.click(screen.getByRole('button', { name: 'Editar ABC1D23' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
-  expect(await screen.findByText('Essa placa já está cadastrada.')).toBeInTheDocument();
-  expect(document.getElementById('modelo')).toHaveValue('Onix');
-});
-test('busca por placa e mostra resultado vazio', async () => {
-  api.listar.mockResolvedValue([registro]);
-  render(<App />); await screen.findByText('Onix');
-  fireEvent.click(screen.getByRole('button', { name: 'Veículos', exact: true }));
-  fireEvent.change(screen.getByRole('textbox', { name: 'Buscar veículos' }), { target: { value: 'xyz' } });
-  expect(screen.getByText('Nenhum resultado encontrado')).toBeInTheDocument();
-  fireEvent.change(screen.getByRole('textbox', { name: 'Buscar veículos' }), { target: { value: 'abc1d23' } });
-  expect(screen.getByText('Onix')).toBeInTheDocument();
-});
-test('exclusão exige confirmação e atualiza a lista', async () => {
-  api.listar.mockResolvedValue([registro]); api.excluir.mockResolvedValue(null);
-  const confirmar = jest.spyOn(window, 'confirm').mockReturnValue(false);
-  render(<App />); await screen.findByText('Onix');
-  fireEvent.click(screen.getByRole('button', { name: 'Excluir ABC1D23' }));
-  expect(api.excluir).not.toHaveBeenCalled();
-  confirmar.mockReturnValue(true); api.listar.mockResolvedValue([]);
-  fireEvent.click(screen.getByRole('button', { name: 'Excluir ABC1D23' }));
-  expect(await screen.findByText('Veículo excluído com sucesso.')).toBeInTheDocument();
-  expect(await screen.findByText('Sua frota começa aqui')).toBeInTheDocument();
-  expect(api.excluir).toHaveBeenCalledWith(1); confirmar.mockRestore();
+test("busca filtra inventário", async () => {
+  api.mockImplementation(async (p) => (p === "/produtos" ? [produto] : []));
+  render(<Estoque />);
+  await screen.findByText("Filtro de Óleo");
+  fireEvent.change(screen.getByLabelText("Buscar produtos"), {
+    target: { value: "bateria" },
+  });
+  expect(screen.queryByText("Filtro de Óleo")).not.toBeInTheDocument();
 });

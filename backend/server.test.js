@@ -1,64 +1,130 @@
-const request = require('supertest');
-jest.mock('./config/db', () => ({ query: jest.fn() }));
-const pool = require('./config/db');
-const app = require('./server');
-const veiculo = { placa: 'ABC1D23', marca: 'Chevrolet', modelo: 'Onix', ano: 2022, quilometragem: 30000 };
+const request = require("supertest");
+jest.mock("./config/db", () => ({ query: jest.fn(), connect: jest.fn() }));
+const pool = require("./config/db");
+const app = require("./server");
+const admin = { id: 1, nome: "Admin", perfil: "Administrador" };
+const token = "a".repeat(64);
+function auth() {
+  pool.query.mockImplementation(async (sql) =>
+    sql.includes("FROM sessoes") ? { rows: [admin] } : { rows: [] },
+  );
+}
 beforeEach(() => jest.resetAllMocks());
-test('lista veículos retornados pelo banco', async () => {
-  pool.query.mockResolvedValue({ rows: [{ id: 1, ...veiculo }] });
-  const res = await request(app).get('/veiculos');
-  expect(res.status).toBe(200); expect(res.body[0].placa).toBe(veiculo.placa);
-});
-test('consulta veículo por ID', async () => {
-  pool.query.mockResolvedValue({ rows: [{ id: 1, ...veiculo }] });
-  expect((await request(app).get('/veiculos/1')).body.id).toBe(1);
-});
-test('cadastro normaliza a placa e retorna 201', async () => {
-  pool.query.mockResolvedValue({ rows: [{ id: 2, ...veiculo }] });
-  const res = await request(app).post('/veiculos').send({ ...veiculo, placa: 'abc1d23' });
-  expect(res.status).toBe(201); expect(pool.query.mock.calls[0][1][0]).toBe('ABC1D23');
-});
-test.each([
-  { placa: 'errada' }, { marca: '' }, { modelo: '   ' }, { ano: 1800 },
-  { ano: 2022.5 }, { quilometragem: -1 }, { quilometragem: '12' },
-  { quilometragem: 1.234 }, { marca: { trim: 'inválido' } },
-])('rejeita dados inválidos: %j', async (invalido) => {
-  expect((await request(app).post('/veiculos').send({ ...veiculo, ...invalido })).status).toBe(400);
+test("protege os cadastros sem autenticação", async () => {
+  expect((await request(app).get("/produtos")).status).toBe(401);
   expect(pool.query).not.toHaveBeenCalled();
 });
-test('permite ano vazio representado por null', async () => {
-  pool.query.mockResolvedValue({ rows: [{ id: 2, ...veiculo, ano: null }] });
-  expect((await request(app).post('/veiculos').send({ ...veiculo, ano: null })).status).toBe(201);
+test("operador não pode gerenciar usuários", async () => {
+  pool.query.mockResolvedValue({ rows: [{ ...admin, perfil: "Operador" }] });
+  expect(
+    (await request(app).get("/usuarios").set("Cookie", `fg_sessao=${token}`))
+      .status,
+  ).toBe(403);
 });
-test('placa duplicada retorna conflito e erro de campo', async () => {
-  pool.query.mockRejectedValue({ code: '23505' });
-  const res = await request(app).post('/veiculos').send(veiculo);
-  expect(res.status).toBe(409); expect(res.body.campos.placa).toBeTruthy();
-});
-test('edita com parâmetros SQL', async () => {
-  pool.query.mockResolvedValue({ rows: [{ id: 1, ...veiculo }] });
-  expect((await request(app).put('/veiculos/1').send(veiculo)).status).toBe(200);
-  expect(pool.query.mock.calls[0][1]).toEqual([...Object.values(veiculo), '1']);
-});
-test.each(['get', 'put', 'delete'])('%s em veículo inexistente retorna 404', async metodo => {
-  pool.query.mockResolvedValue({ rows: [], rowCount: 0 });
-  expect((await request(app)[metodo]('/veiculos/999').send(veiculo)).status).toBe(404);
-});
-test('exclui veículo', async () => {
-  pool.query.mockResolvedValue({ rowCount: 1 });
-  expect((await request(app).delete('/veiculos/1')).status).toBe(204);
-});
-test('impede exclusão com vínculos', async () => {
-  pool.query.mockRejectedValue({ code: '23503' });
-  expect((await request(app).delete('/veiculos/1')).status).toBe(409);
-});
-test('rejeita ID inválido', async () => {
-  expect((await request(app).get('/veiculos/abc')).status).toBe(400);
+test("rejeita alteração a partir de outra origem", async () => {
+  expect(
+    (
+      await request(app)
+        .post("/produtos")
+        .set("Origin", "https://example.org")
+        .send({})
+    ).status,
+  ).toBe(403);
   expect(pool.query).not.toHaveBeenCalled();
 });
-test('falha de conexão retorna erro legível sem expor detalhes', async () => {
-  const log = jest.spyOn(console, 'error').mockImplementation(() => {});
-  pool.query.mockRejectedValue(new Error('detalhe interno'));
-  const res = await request(app).get('/veiculos');
-  expect(res.status).toBe(500); expect(res.body.erro).not.toContain('detalhe interno'); log.mockRestore();
+test.each([-1, 1.5, 1000000001, "5"])(
+  "rejeita quantidade inválida %s",
+  async (quantidade) => {
+    auth();
+    expect(
+      (
+        await request(app)
+          .post("/produtos")
+          .set("Cookie", `fg_sessao=${token}`)
+          .send({
+            nome: "Filtro",
+            modelo: "A",
+            quantidade,
+            estoque_minimo: 1,
+            valor_unitario: "20.00",
+          })
+      ).status,
+    ).toBe(400);
+    expect(pool.connect).not.toHaveBeenCalled();
+  },
+);
+test("não aceita atualizar saldo pelo formulário de produto", async () => {
+  auth();
+  const r = await request(app)
+    .put("/produtos/1")
+    .set("Cookie", `fg_sessao=${token}`)
+    .send({
+      nome: "Filtro",
+      modelo: "A",
+      estoque_minimo: 1,
+      valor_unitario: "20",
+      quantidade: 99,
+    });
+  expect(r.status).toBe(400);
+  expect(pool.connect).not.toHaveBeenCalled();
+});
+test("valida intervalo de datas do relatório", async () => {
+  auth();
+  expect(
+    (
+      await request(app)
+        .get("/relatorios?de=2026-12-01&ate=2026-01-01")
+        .set("Cookie", `fg_sessao=${token}`)
+    ).status,
+  ).toBe(400);
+});
+test("impede exclusão da própria conta", async () => {
+  auth();
+  expect(
+    (
+      await request(app)
+        .delete("/usuarios/1")
+        .set("Cookie", `fg_sessao=${token}`)
+    ).status,
+  ).toBe(409);
+});
+test("reverte uma transação se ocorrer falha de gravação", async () => {
+  auth();
+  const c = {
+    query: jest.fn().mockImplementation(async (sql) => {
+      if (sql.startsWith("INSERT INTO produtos"))
+        throw new Error("falha simulada");
+      return { rows: [] };
+    }),
+    release: jest.fn(),
+  };
+  pool.connect.mockResolvedValue(c);
+  const log = jest.spyOn(console, "error").mockImplementation(() => {});
+  const r = await request(app)
+    .post("/produtos")
+    .set("Cookie", `fg_sessao=${token}`)
+    .send({
+      nome: "Filtro",
+      modelo: "A",
+      quantidade: 0,
+      estoque_minimo: 1,
+      valor_unitario: "20",
+    });
+  expect(r.status).toBe(500);
+  expect(c.query).toHaveBeenCalledWith("ROLLBACK");
+  expect(c.release).toHaveBeenCalled();
+  log.mockRestore();
+});
+
+test.each(["http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000"])(
+  "aceita requisições do frontend local: %s",
+  async (origem) => {
+    const resposta = await request(app).post("/auth/logout").set("Origin", origem).send({});
+    expect(resposta.status).toBe(204);
+    expect(resposta.headers["access-control-allow-origin"]).toBe(origem);
+  },
+);
+test("bloqueia requisições de site externo", async () => {
+  const resposta = await request(app).post("/auth/logout").set("Origin", "https://example.org").send({});
+  expect(resposta.status).toBe(403);
 });
