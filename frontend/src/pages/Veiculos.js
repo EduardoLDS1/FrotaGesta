@@ -19,8 +19,6 @@ const inicial = {
   ano: "",
   quilometragem: "",
   combustivel: "Gasolina",
-  consumo_medio: "",
-  preco_litro: "",
   situacao_aquisicao: "Não informado",
   data_aquisicao: "",
   valor_compra: "",
@@ -30,6 +28,9 @@ const inicial = {
   parcelas_pagas: "",
   observacoes_financeiras: "",
   primeiro_vencimento: "",
+  situacao_operacional: "Ativo",
+  revisao_prevista_data: "",
+  revisao_prevista_km: "",
 };
 export default function Veiculos() {
   const lista = useData("/veiculos"),
@@ -62,9 +63,9 @@ export default function Veiculos() {
           ...form,
           ano: form.ano === "" ? null : Number(form.ano),
           quilometragem: Number(form.quilometragem),
-          consumo_medio: form.consumo_medio === "" ? null : Number(form.consumo_medio),
-          preco_litro: form.preco_litro === "" ? null : Number(form.preco_litro),
           data_aquisicao: form.data_aquisicao || null,
+          revisao_prevista_data: form.revisao_prevista_data || null,
+          revisao_prevista_km: form.revisao_prevista_km === "" ? null : Number(form.revisao_prevista_km),
           valor_compra: Number(form.valor_compra || 0),
           valor_entrada: Number(form.valor_entrada || 0),
           valor_parcela: Number(form.valor_parcela || 0),
@@ -172,6 +173,13 @@ export default function Veiculos() {
                   step="0.01"
                   required
                 />
+                <Field label="Situação operacional" name="situacao_operacional"
+                  value={form.situacao_operacional} onChange={change}
+                  options={["Ativo", "Inativo", "Indisponível"].map(v=>({value:v,label:v}))} />
+                <Field label="Próxima revisão por data" name="revisao_prevista_data"
+                  value={form.revisao_prevista_data} onChange={change} type="date" />
+                <Field label="Próxima revisão por KM" name="revisao_prevista_km"
+                  value={form.revisao_prevista_km} onChange={change} type="number" min="0" step="0.01" />
                 <Field label="Combustível" name="combustivel" value={form.combustivel} onChange={change}
                   options={["Gasolina", "Etanol", "Diesel", "Flex", "GNV", "Elétrico", "Outro"].map(v => ({value:v,label:v}))} />
                 <Field label="Situação de aquisição" name="situacao_aquisicao" value={form.situacao_aquisicao}
@@ -239,7 +247,7 @@ export default function Veiculos() {
             "Modelo",
             "Ano",
             "Quilometragem",
-            "Aquisição / Consumo",
+            "Aquisição",
             "Status",
             "Última Manutenção",
             "Ações",
@@ -262,9 +270,9 @@ export default function Veiculos() {
               </td>
               <td>{v.ano || "—"}</td>
               <td>{numero(v.quilometragem)} km</td>
-              <td className="wrap">{v.situacao_aquisicao}<small>{v.consumo_medio ? `${v.consumo_medio} km/l` : "Média não definida"}</small></td>
+              <td className="wrap">{v.situacao_aquisicao}</td>
               <td>
-                <Badge tone={v.status === "Em manutenção" ? "yellow" : v.status === "Em viagem" ? "yellow" : "green"}>
+                <Badge tone={["Em manutenção","Em viagem","Indisponível","Inativo"].includes(v.status) ? "yellow" : "green"}>
                   {v.status}
                 </Badge>
               </td>
@@ -282,8 +290,6 @@ export default function Veiculos() {
                       ano: String(v.ano ?? ""),
                       quilometragem: String(v.quilometragem),
                       combustivel: v.combustivel || "Gasolina",
-                      consumo_medio: "",
-                      preco_litro: "",
                       situacao_aquisicao: v.situacao_aquisicao || "Não informado",
                       data_aquisicao: v.data_aquisicao ? String(v.data_aquisicao).slice(0, 10) : "",
                       valor_compra: String(v.valor_compra ?? ""),
@@ -293,6 +299,9 @@ export default function Veiculos() {
                       parcelas_pagas: String(v.parcelas_pagas ?? ""),
                       observacoes_financeiras: v.observacoes_financeiras || "",
                       primeiro_vencimento: v.primeiro_vencimento ? String(v.primeiro_vencimento).slice(0,10) : "",
+                      situacao_operacional: v.situacao_operacional || "Ativo",
+                      revisao_prevista_data: v.revisao_prevista_data ? String(v.revisao_prevista_data).slice(0,10) : "",
+                      revisao_prevista_km: v.revisao_prevista_km == null ? "" : String(v.revisao_prevista_km),
                     });
                     setShow(true);
                     setTimeout(

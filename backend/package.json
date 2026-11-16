@@ -8,8 +8,10 @@
     "test": "jest --runInBand",
     "setup": "node --env-file-if-exists=.env scripts/setup.js",
     "reset-admin": "node --env-file-if-exists=.env scripts/reset-admin.js",
-    "test:integration": "node tests/integracao.cjs && node tests/modulo5.cjs",
-    "test:modulo5": "node tests/modulo5.cjs"
+    "test:integration": "node tests/integracao.cjs && node tests/modulo5.cjs && node tests/modulo7.cjs && node tests/requisitos-tcc.cjs",
+    "test:modulo5": "node tests/modulo5.cjs",
+    "test:modulo7": "node tests/modulo7.cjs",
+    "test:requisitos": "node tests/requisitos-tcc.cjs"
   },
   "keywords": [],
   "author": "",

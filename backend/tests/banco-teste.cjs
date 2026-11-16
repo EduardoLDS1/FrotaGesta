@@ -16,6 +16,10 @@ async function preparar() {
   await db.exec(
     fs.readFileSync(path.join(__dirname, "../database/modulo6.sql"), "utf8"),
   );
+  await db.exec(
+    fs.readFileSync(path.join(__dirname, "../database/modulo7.sql"), "utf8"),
+  );
+  await db.exec(fs.readFileSync(path.join(__dirname, "../database/modulo8.sql"), "utf8"));
   let fila = Promise.resolve();
   const query = async (sql, params) => {
     const r = await db.query(sql, params);

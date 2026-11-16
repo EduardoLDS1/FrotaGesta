@@ -20,7 +20,7 @@ async function autenticar(req, res, next) {
       [resumo(token)],
     );
     if (!rows[0]) throw new Falha(401, "Sua sessão expirou. Entre novamente.");
-    req.usuario = rows[0];
+    req.usuario = { ...rows[0], role: rows[0].perfil === "Administrador" ? "admin" : "user" };
     next();
   } catch (err) {
     next(err);
@@ -29,7 +29,7 @@ async function autenticar(req, res, next) {
 function administrador(req, res, next) {
   if (req.usuario.perfil !== "Administrador")
     return next(
-      new Falha(403, "Somente administradores podem gerenciar usuários."),
+      new Falha(403, "Acesso permitido somente a administradores."),
     );
   next();
 }

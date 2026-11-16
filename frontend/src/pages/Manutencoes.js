@@ -21,8 +21,7 @@ const inicial = () => ({
   mecanico: "",
   observacoes: "",
   status: "Concluída",
-  produto_id: "",
-  quantidade_pecas: "1",
+  itens: [],
 });
 export default function Manutencoes() {
   const lista = useData("/manutencoes"),
@@ -50,12 +49,14 @@ export default function Manutencoes() {
     setError("");
     setSuccess("");
     try {
-      const { produto_id, quantidade_pecas, ...body } = form;
-      if (!edit) {
-        body.produto_id = produto_id ? Number(produto_id) : null;
-        body.quantidade_pecas = produto_id ? Number(quantidade_pecas) : 0;
-      }
-      body.veiculo_id = Number(body.veiculo_id);
+      const body = {
+        veiculo_id: Number(form.veiculo_id), data: form.data, tipo: form.tipo,
+        servico: form.servico, custo: form.custo, mecanico: form.mecanico,
+        observacoes: form.observacoes, status: form.status,
+      };
+      if (!edit) body.itens = form.itens.filter(i => i.produto_id).map(i => ({
+        produto_id: Number(i.produto_id), quantidade: Number(i.quantidade)
+      }));
       await api(edit ? `/manutencoes/${edit}` : "/manutencoes", {
         method: edit ? "PUT" : "POST",
         body,
@@ -166,7 +167,7 @@ export default function Manutencoes() {
                   maxLength={200}
                 />
                 <Field
-                  label="Custo total (R$)"
+                  label="Mão de obra / serviços (R$)"
                   name="custo"
                   value={form.custo}
                   onChange={change}
@@ -195,38 +196,29 @@ export default function Manutencoes() {
                   }))}
                 />
                 {!edit && (
-                  <>
-                    <Field
-                      label="Peça do estoque (opcional)"
-                      name="produto_id"
-                      value={String(form.produto_id)}
-                      onChange={change}
-                      options={[
-                        { value: "", label: "Sem retirada de peça" },
-                        ...(produtos.data || []).map((p) => ({
-                          value: String(p.id),
-                          label: `${p.nome} — ${p.modelo} (${p.quantidade} un.)`,
-                        })),
-                      ]}
-                    />
-                    {form.produto_id && (
-                      <Field
-                        label="Quantidade de peças"
-                        name="quantidade_pecas"
-                        value={String(form.quantidade_pecas)}
-                        onChange={change}
-                        type="number"
-                        min="1"
-                        step="1"
-                        max={
-                          (produtos.data || []).find(
-                            (p) => String(p.id) === String(form.produto_id),
-                          )?.quantidade || 0
-                        }
-                        required
-                      />
-                    )}
-                  </>
+                  <div className="field full">
+                    <span>Peças utilizadas (opcional)</span>
+                    {form.itens.map((item, index) => (
+                      <div key={index} className="filters" style={{marginTop: 8}}>
+                        <select aria-label={`Peça ${index + 1}`} value={item.produto_id}
+                          onChange={e => setForm(f => ({...f,itens:f.itens.map((i,n)=>n===index?{...i,produto_id:e.target.value}:i)}))}>
+                          <option value="">Selecione a peça</option>
+                          {(produtos.data || []).map(p => <option key={p.id} value={p.id}>
+                            {p.nome} — {p.modelo} (saldo {p.quantidade})
+                          </option>)}
+                        </select>
+                        <input type="number" aria-label={`Quantidade da peça ${index + 1}`}
+                          min="1" step="1" required value={item.quantidade}
+                          onChange={e => setForm(f => ({...f,itens:f.itens.map((i,n)=>n===index?{...i,quantidade:e.target.value}:i)}))} />
+                        <button type="button" className="button secondary" onClick={() => setForm(f => ({...f,itens:f.itens.filter((_,n)=>n!==index)}))}>
+                          Remover
+                        </button>
+                      </div>
+                    ))}
+                    <button className="button secondary" type="button" onClick={() => setForm(f => ({...f,itens:[...f.itens,{produto_id:"",quantidade:"1"}]}))}>
+                      Adicionar peça
+                    </button>
+                  </div>
                 )}
                 <label className="field full">
                   <span>Observações</span>
@@ -239,9 +231,9 @@ export default function Manutencoes() {
                 </label>
               </div>
               <p className="helper">
-                O custo total inclui peças e serviços. A retirada da peça ocorre
-                ao salvar o cadastro.
-                {edit ? " A edição mantém a retirada original." : ""}
+                Informe o custo de serviços separado das peças. O valor das peças será calculado
+                pelos preços cadastrados no estoque. A retirada ocorre ao salvar.
+                {edit ? " As peças já retiradas ficam preservadas na edição." : ""}
               </p>
               <div className="form-end">
                 <button
@@ -324,13 +316,11 @@ export default function Manutencoes() {
               </td>
               <td className="wrap">
                 {m.servico}
-                {m.produto_nome && (
-                  <small>
-                    {m.quantidade_pecas} × {m.produto_nome}
-                  </small>
-                )}
+                {(m.itens || []).map(p => (
+                  <small key={p.produto_id}>{p.quantidade} × {p.nome}</small>
+                ))}
               </td>
-              <td>{moeda(m.custo)}</td>
+              <td>{moeda(m.custo_total ?? m.custo)}</td>
               <td>{m.mecanico}</td>
               <td className="wrap">{m.observacoes || "—"}</td>
               <td>
@@ -347,8 +337,8 @@ export default function Manutencoes() {
                     setForm({
                       ...m,
                       data: String(m.data).slice(0, 10),
-                      produto_id: m.produto_id || "",
                       custo: String(m.custo),
+                      itens: [],
                     });
                     setShow(true);
                     window.scrollTo({ top: 0, behavior: "smooth" });

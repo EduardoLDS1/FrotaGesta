@@ -25,6 +25,7 @@ export default function Usuarios({ usuario }) {
     [form, setForm] = useState(inicial),
     [edit, setEdit] = useState(null),
     [page, setPage] = useState(1),
+    [pesquisa, setPesquisa] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [success, setSuccess] = useState(""),
@@ -202,13 +203,16 @@ export default function Usuarios({ usuario }) {
         </form>
       </section>
       <section className="panel">
-        <h2>
-          <Icon name="users" />
-          Lista de Usuários
-        </h2>
+        <h2><Icon name="users" /> Lista de Usuários</h2>
+        <div className="filters">
+          <input aria-label="Buscar usuários" placeholder="Pesquisar nome, e-mail ou login…"
+            value={pesquisa} onChange={e => {setPesquisa(e.target.value);setPage(1);}} />
+        </div>
         <Table
           headers={["Nome", "E-mail", "Perfil", "Status", "Ações"]}
-          rows={(lista.data || []).slice((page - 1) * 10, page * 10)}
+          rows={(lista.data || []).filter(u =>
+            `${u.nome} ${u.email} ${u.login}`.toLowerCase().includes(pesquisa.toLowerCase()))
+            .slice((page - 1) * 10, page * 10)}
           render={(u) => (
             <tr key={u.id}>
               <td>
@@ -277,7 +281,9 @@ export default function Usuarios({ usuario }) {
             </tr>
           )}
         />
-        <Pager total={lista.data?.length || 0} page={page} setPage={setPage} />
+        <Pager total={(lista.data || []).filter(u =>
+          `${u.nome} ${u.email} ${u.login}`.toLowerCase().includes(pesquisa.toLowerCase())).length}
+          page={page} setPage={setPage} />
       </section>
     </>
   );

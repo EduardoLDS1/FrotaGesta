@@ -34,8 +34,9 @@ test("tela de login segue fluxo autenticado", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
   expect(await screen.findByText("Bem-vindo, Eduardo")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Usuários" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Relatórios" })).toBeInTheDocument();
 });
-test("operador não vê o menu de usuários", async () => {
+test("operador não vê menus de usuários ou relatórios", async () => {
   api.mockImplementation(async (p) =>
     p === "/auth/me"
       ? { id: 2, nome: "Operador", perfil: "Operador" }
@@ -52,6 +53,10 @@ test("operador não vê o menu de usuários", async () => {
   expect(
     screen.queryByRole("button", { name: "Usuários" }),
   ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Relatórios" }),
+  ).not.toBeInTheDocument();
+  expect(api).not.toHaveBeenCalledWith(expect.stringContaining("/relatorios"));
 });
 const produto = {
   id: 1,

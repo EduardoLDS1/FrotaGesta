@@ -26,6 +26,12 @@ const {
       await c.query(
         fs.readFileSync(path.join(__dirname, "../database/modulo6.sql"), "utf8"),
       );
+      await c.query(
+        fs.readFileSync(path.join(__dirname, "../database/modulo7.sql"), "utf8"),
+      );
+      await c.query(
+        fs.readFileSync(path.join(__dirname, "../database/modulo8.sql"), "utf8"),
+      );
       await c.query("BEGIN");
       await c.query("LOCK TABLE usuarios IN SHARE ROW EXCLUSIVE MODE");
       const { rows } = await c.query(

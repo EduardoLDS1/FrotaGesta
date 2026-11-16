@@ -9,7 +9,7 @@ const hojeISO = () => new Date().toLocaleDateString('sv-SE', {timeZone:'America/
 async function sincronizar(c = pool) {
   const veiculos = (await c.query(`SELECT id, situacao_aquisicao, valor_parcela, total_parcelas,
       primeiro_vencimento, parcela_inicio_automatica FROM veiculos
-      WHERE situacao_aquisicao IN ('Financiado','Locado') AND valor_parcela > 0
+      WHERE excluido=FALSE AND situacao_aquisicao IN ('Financiado','Locado') AND valor_parcela > 0
         AND primeiro_vencimento IS NOT NULL`)).rows;
   const hoje = hojeISO();
   for (const v of veiculos) {

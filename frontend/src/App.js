@@ -90,7 +90,7 @@ export default function App() {
       </>
     );
   const paginasPermitidas = paginas.filter(
-    (p) => p[0] !== "usuarios" || usuario.perfil === "Administrador",
+    (p) => !["usuarios", "relatorios"].includes(p[0]) || usuario.perfil === "Administrador",
   );
   return (
     <div className="app-shell">
@@ -149,8 +149,10 @@ export default function App() {
           {pagina === "manutencoes" && <Manutencoes />}{" "}
           {pagina === "estoque" && <Estoque />}{" "}
           {pagina === "viagens" && <Viagens />}{" "}
-          {pagina === "despesas" && <Despesas />}{" "}
-          {pagina === "relatorios" && <Relatorios />}{" "}
+          {pagina === "despesas" && <Despesas usuario={usuario} />}{" "}
+          {pagina === "relatorios" && usuario.perfil === "Administrador" && (
+            <Relatorios usuario={usuario} />
+          )}{" "}
           {pagina === "usuarios" && usuario.perfil === "Administrador" && (
             <Usuarios usuario={usuario} />
           )}

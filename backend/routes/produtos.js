@@ -16,6 +16,9 @@ function cadastro(b) {
     texto(b.modelo, 100),
     inteiro(b.estoque_minimo),
     dinheiro(b.valor_unitario),
+    b.codigo ? texto(b.codigo, 50) : null,
+    texto(b.categoria || "Não informado", 80),
+    texto(b.fornecedor || "Não informado", 120),
   ];
 }
 router.get("/", async (req, res) =>
@@ -43,9 +46,16 @@ router.post("/", async (req, res) => {
     quantidade = inteiro(req.body.quantidade);
   const produto = await transacao(async (c) => {
     const { rows } = await c.query(
-      "INSERT INTO produtos (nome,modelo,estoque_minimo,valor_unitario) VALUES ($1,$2,$3,$4) RETURNING *",
+      "INSERT INTO produtos (nome,modelo,estoque_minimo,valor_unitario,codigo,categoria,fornecedor) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
       dados,
     );
+    if (!rows[0].codigo) {
+      const atualizado = await c.query(
+        "UPDATE produtos SET codigo=$1 WHERE id=$2 RETURNING *",
+        [`PROD-${rows[0].id}`, rows[0].id],
+      );
+      rows[0] = atualizado.rows[0];
+    }
     await atividade(
       c,
       req.usuario,
@@ -73,7 +83,7 @@ router.put("/:id", async (req, res) => {
   res.json(
     await transacao(async (c) => {
       const { rows } = await c.query(
-        "UPDATE produtos SET nome=$1,modelo=$2,estoque_minimo=$3,valor_unitario=$4,updated_at=NOW() WHERE id=$5 AND excluido=FALSE RETURNING *",
+        "UPDATE produtos SET nome=$1,modelo=$2,estoque_minimo=$3,valor_unitario=$4,codigo=COALESCE($5,codigo),categoria=$6,fornecedor=$7,updated_at=NOW() WHERE id=$8 AND excluido=FALSE RETURNING *",
         [...dados, chave],
       );
       exigir(rows[0], "Produto não encontrado.", 404);
@@ -98,15 +108,6 @@ router.delete("/:id", async (req, res) => {
     exigir(
       rows[0].quantidade === 0,
       "Registre a saída do saldo restante antes de excluir este produto.",
-      409,
-    );
-    const vinculo = await c.query(
-      "SELECT id FROM manutencoes WHERE produto_id=$1 AND excluido=FALSE LIMIT 1",
-      [chave],
-    );
-    exigir(
-      !vinculo.rows.length,
-      "Este produto está vinculado a uma manutenção e precisa ser mantido no cadastro.",
       409,
     );
     await c.query(

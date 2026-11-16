@@ -16,6 +16,9 @@ import {
 const inicial = {
   nome: "",
   modelo: "",
+  codigo: "",
+  categoria: "",
+  fornecedor: "",
   quantidade: "0",
   valor_unitario: "",
   estoque_minimo: "5",
@@ -45,7 +48,7 @@ export default function Estoque() {
   const produtos = lista.data || [],
     filtrados = produtos.filter(
       (p) =>
-        (p.nome + " " + p.modelo).toLowerCase().includes(query.toLowerCase()) &&
+        (p.nome + " " + p.modelo + " " + p.codigo + " " + p.categoria + " " + p.fornecedor).toLowerCase().includes(query.toLowerCase()) &&
         (!baixo || p.quantidade <= p.estoque_minimo),
     );
   const movimentos = (historico.data || []).filter(
@@ -73,6 +76,9 @@ export default function Estoque() {
         const body = {
           nome: form.nome,
           modelo: form.modelo,
+          codigo: form.codigo,
+          categoria: form.categoria,
+          fornecedor: form.fornecedor,
           valor_unitario: form.valor_unitario,
           estoque_minimo: Number(form.estoque_minimo),
         };
@@ -172,6 +178,12 @@ export default function Estoque() {
                 required
                 maxLength={100}
               />
+              <Field label="Código" name="codigo" value={form.codigo} onChange={change}
+                placeholder="Ex.: PEC-001" maxLength={50} required />
+              <Field label="Categoria" name="categoria" value={form.categoria} onChange={change}
+                placeholder="Ex.: Filtros" maxLength={80} required />
+              <Field label="Fornecedor" name="fornecedor" value={form.fornecedor} onChange={change}
+                placeholder="Ex.: Distribuidora" maxLength={120} required />
               {!edit && (
                 <Field
                   label="Quantidade inicial"
@@ -242,7 +254,7 @@ export default function Estoque() {
         <div className="filters">
           <input
             aria-label="Buscar produtos"
-            placeholder="Buscar por item ou modelo…"
+            placeholder="Buscar item, código, categoria ou fornecedor…"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -270,6 +282,9 @@ export default function Estoque() {
             headers={[
               "Item",
               "Modelo",
+              "Código",
+              "Categoria",
+              "Fornecedor",
               "Quantidade",
               "Mínimo",
               "Valor Unitário",
@@ -283,6 +298,9 @@ export default function Estoque() {
               <tr key={p.id}>
                 <td>{p.nome}</td>
                 <td>{p.modelo}</td>
+                <td>{p.codigo || "—"}</td>
+                <td>{p.categoria}</td>
+                <td>{p.fornecedor}</td>
                 <td>{numero(p.quantidade)} unidades</td>
                 <td>{numero(p.estoque_minimo)}</td>
                 <td>{moeda(p.valor_unitario)}</td>

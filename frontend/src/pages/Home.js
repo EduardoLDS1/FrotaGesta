@@ -29,6 +29,7 @@ export default function Home({ go }) {
             "manutencoes",
           ],
           ["Alertas de Estoque", data?.alertas, "stock", "red", "estoque"],
+          ["Revisões pendentes", data?.revisoes_pendentes, "tools", "yellow", "veiculos"],
           ["Viagens em andamento", data?.viagens_abertas, "route", "green", "viagens"],
         ].map(([label, value, icon, tone, page]) => (
           <button
@@ -66,6 +67,18 @@ export default function Home({ go }) {
           )}
         />
       </section>
+      {!!data?.revisoes_pendentes_lista?.length && (
+        <section className="panel">
+          <h2>Manutenções preventivas previstas</h2>
+          <Table headers={["Placa", "Modelo", "Odômetro", "Data prevista", "KM prevista"]}
+            rows={data.revisoes_pendentes_lista}
+            render={v => <tr key={v.id}>
+              <td>{v.placa}</td><td>{v.modelo}</td><td>{numero(v.quilometragem)} km</td>
+              <td>{v.revisao_prevista_data ? String(v.revisao_prevista_data).slice(0,10).split('-').reverse().join('/') : '—'}</td>
+              <td>{v.revisao_prevista_km == null ? '—' : numero(v.revisao_prevista_km)+' km'}</td>
+            </tr>} />
+        </section>
+      )}
       {!!data?.produtos_baixos?.length && (
         <section className="panel">
           <h2>Itens que precisam de reposição</h2>
